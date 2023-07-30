@@ -19,29 +19,35 @@
             display: block;
             width: 120px;
             height: 20px;
-            margin: 20px auto;
+            margin: 0px auto;
             cursor: pointer;
         }
         .datapoint:hover {
             cursor: pointer;
         }
+        .annotation-note-label, .annotation-note-title {
+            font-family: 'Lato';
+            font-size: 12px;
+        }
     </style>
 </head>
 <body onload='init()'>
 <h1 style="text-align:center; font-family:Lato;">COVID-19 Narrative Visualization</h1>
+<div id="caption" style="text-align:center; width:700px; margin:0px auto; font-family:Lato;"></div>
 <div class="chart-container">
     <div id="my_dataviz"></div>
 </div>
 <button id="back_button" class="centered-button" style="display:none;">Back to beginning</button>
 <script src='https://d3js.org/d3.v6.min.js'></script>
-<script src="https://d3js.org/d3-annotation.v2.min.js"></script>
+<script src="https://rawgit.com/susielu/d3-annotation/master/d3-annotation.min.js"></script>
 <script>
     let raw_data;
     async function init() {
         raw_data = await d3.csv('https://raw.githubusercontent.com/selenaalu/narrative-visualization/master/us-counties-2021-cases-masks.csv');
         
         let filtered_data = raw_data.filter(function(d) {
-            return !["Puerto Rico", "Virgin Islands", "Northern Mariana Islands", "American Samoa"].includes(d.state);
+            return !["Puerto Rico", "Virgin Islands", "Northern Mariana Islands", "American Samoa", "Unknown"].includes(d.state) 
+                   && d.county != 'Unknown';
         });
 
         let grouped_data = d3.group(filtered_data, d => d.state);
@@ -64,7 +70,13 @@
     function plot_counties(state) {
         document.getElementById("back_button").style.display = "block";
         
-        let filtered_data = raw_data.filter(d => d.state == state);
+        let new_data = raw_data.filter(function(d) {
+            return !["Puerto Rico", "Virgin Islands", "Northern Mariana Islands", "American Samoa", "Unknown"].includes(d.state) 
+                   && d.county != 'Unknown';
+        });
+        
+        let filtered_data = new_data.filter(d => d.state == state);
+
         let grouped_data = d3.group(filtered_data, d => d.county);
         
         let data = Array.from(grouped_data, ([k, v]) => ({
@@ -86,9 +98,9 @@
         d3.select("svg").remove();
         d3.select(".tooltip").remove(); 
 
-        var margin = { top: 100, right: 175, bottom: 50, left: 50 },
-            width = 725 - margin.left - margin.right,
-            height = 650 - margin.top - margin.bottom;
+        var margin = { top: 100, right: 275, bottom: 150, left: 275 },
+            width = 1050 - margin.left - margin.right,
+            height = 750 - margin.top - margin.bottom;
 
         var x = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_cases})]).range([0, width]);
         var y = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_deaths})]).range([height, 0]);
@@ -145,7 +157,6 @@
                 } else {
                     plot_bar_chart(d.state,d.county);
                 }
-                
             });
 
         svg.append('g')
@@ -156,7 +167,7 @@
             .call(d3.axisBottom(x));
     
         var legend = svg.append('g')
-            .attr('transform', 'translate(' + (width + margin.right / 2) + ', ' + (height / 2) + ')');
+            .attr('transform', 'translate(' + (width + 50) + ', ' + (height / 2) + ')');
 
         var gradient = legend.append('defs')
             .append('linearGradient')
@@ -233,7 +244,7 @@
 
         svg.append("text")
             .attr("transform", "rotate(-90)")
-            .attr("y", 0 - margin.left)
+            .attr("y", -50)
             .attr("x", 0 - (height / 2))
             .attr("dy", "1em")
             .style("font-size", "14px")
@@ -241,10 +252,128 @@
             .style("font-family", "Lato")
             .text("Average Deaths per 100K");
         
+        let max_point = data.reduce((prev, current) => {
+            return (current.avg_cases > prev.avg_cases && current.avg_deaths > prev.avg_deaths && current.avg_mask_never > prev.avg_mask_never) ? current : prev
+        })
+
+        var annotations;
+        if (is_county) {
+            annotations = [
+                {
+                    note: {
+                        label: "This point has simultaneously high average cases per 100k, average deaths per 100k, and percentage of people who never wear a mask",
+                        title: "High Cases, High Deaths, High 'Never Mask'",
+                        wrap: 250
+                    },
+                    x: x(max_point.avg_cases), 
+                    y: y(max_point.avg_deaths), 
+                    dx: (width + 25) - x(max_point.avg_cases), 
+                    dy: margin.top - y(max_point.avg_deaths),
+                    type: d3.annotationCalloutElbow,
+                    id: "annotation1",
+                    color: ["red"]
+                }
+            ];
+        } else {
+            annotations = [
+                {
+                    note: {
+                        label: "This point has simultaneously high average cases per 100k, average deaths per 100k, and percentage of people who never wear a mask",
+                        title: "High Cases, High Deaths, High 'Never Mask'",
+                        wrap: 250
+                    },
+                    x: x(max_point.avg_cases), 
+                    y: y(max_point.avg_deaths),
+                    dx: (width + 25) - x(max_point.avg_cases), 
+                    dy: margin.top - y(max_point.avg_deaths),
+                    type: d3.annotationCalloutElbow,
+                    id: "annotation1",
+                    color: ["red"]
+                }
+            ];
+        }
+        
+        var makeAnnotations = d3.annotation()
+            .annotations(annotations)
+            .on('noteover', function(annotation, i) {
+                if (annotation.id === 'annotation1') {
+                    d3.select(this).select('g.annotation-connector, g.annotation-note')
+                    .attr('transform', `translate(${100}, ${margin.top+50})`);
+                }
+            });
+
+        svg.append("g")
+            .call(makeAnnotations);
+        
+        let min_point = data.reduce((prev, current) => {
+            return (current.avg_cases < prev.avg_cases && current.avg_deaths < prev.avg_deaths && current.avg_mask_never < prev.avg_mask_never) ? current : prev
+        })
+        
+        var annotations;
+        if (is_county) {
+            annotations = [
+                {
+                    note: {
+                        label: "This point has simultaneously low average cases per 100k, average deaths per 100k, and percentage of people who never wear a mask",
+                        title: "Low Cases, Low Deaths, Low 'Never Mask'",
+                        wrap: 250
+                    },
+                    x: x(min_point.avg_cases), 
+                    y: y(min_point.avg_deaths), 
+                    dx: -100, 
+            dy: height - y(min_point.avg_deaths) + 50,
+                    type: d3.annotationCalloutElbow,
+                    id: "annotation2",
+                    color: ["red"]
+                }
+            ];
+        } else {
+            annotations = [
+                {
+                    note: {
+                        label: "This point has simultaneously low average cases per 100k, average deaths per 100k, and percentage of people who never wear a mask",
+                        title: "Low Cases, Low Deaths, Low 'Never Mask'",
+                        wrap: 250
+                    },
+                    x: x(min_point.avg_cases), 
+                    y: y(min_point.avg_deaths), 
+                    dx: -100, 
+            dy: height - y(min_point.avg_deaths) + 50,
+                    type: d3.annotationCalloutElbow,
+                    id: "annotation2",
+                    color: ["red"]
+                }
+            ];
+        }
+        
+        var makeAnnotations = d3.annotation()
+            .annotations(annotations)
+            .on('noteover', function(annotation, i) {
+                if (annotation.id === 'annotation2') {
+                    d3.select(this).select('g.annotation-connector, g.annotation-note')
+                    .attr('transform', `translate(${margin.left}, ${height + margin.bottom + 50})`);
+                }
+            });
+
+        svg.append("g")
+            .call(makeAnnotations);
+
+        var caption;
+        if (is_county) {
+            caption = [
+                "<p>The scatterplot below examines the relationship between COVID-19 cases and deaths at the county level. The points are colored based on the average percentage of people who never wear a mask. Click on a point to dive further into a specific county.</p>"
+            ];
+        } else {
+            caption = [
+                "<p>This narrative visualization depicts average daily COVID-19 cases/deaths per 100k people and mask wearing frequency across US states and counties. The scatterplot below examines the relationship between COVID-19 cases and deaths at the state level.  The points are colored based on the average percentage of people who never wear a mask. Click on a point to dive further into a specific state.</p>",
+            ];
+        }
+
+        document.getElementById("caption").innerHTML = caption;
+
     }
 
     function plot_bar_chart(state, county) {
-
         d3.select("svg").remove();
         d3.select(".tooltip").remove(); 
 
@@ -325,6 +454,12 @@
             .style("text-anchor", "middle")
             .style("font-family", "Lato")
             .text("Average Proportion");
+
+        caption = [
+                "<p>The bar chart below depicts average mask wearing frequency percentages across all frequency levels (Never, Rarely, Sometimes, Frequently, Always) in the selected county.</p>",
+            ];
+        
+        document.getElementById("caption").innerHTML = caption;
     }
 
 </script>
