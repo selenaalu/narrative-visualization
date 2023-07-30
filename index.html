@@ -1,37 +1,87 @@
-html>
-<script src='https://d3js.org/d3.v6.min.js'></script>
-<style> circle {fill: lightblue; stroke: black;} </style>
+<html>
+<head>
+    <link href='https://fonts.googleapis.com/css?family=Lato:100,200,300,400,500,600,700' rel='stylesheet' type='text/css'>
+    <style>
+        .tooltip {
+            position: fixed;
+            opacity: 0;
+            background-color: white;
+            border: solid;
+            border-width: 2px;
+            border-radius: 3px;
+            padding: 5px;
+        }
+    </style>
+</head>
 <body onload='init()'>
-<svg width=500 height=500></svg>
+<div id="my_dataviz"></div>
+<script src='https://d3js.org/d3.v6.min.js'></script>
 <script>
     async function init() {
         let raw_data = await d3.csv('https://raw.githubusercontent.com/selenaalu/narrative-visualization/master/us-counties-2021-cases-masks.csv');
-
-        let grouped_data = d3.group(raw_data, d => d.state);
+        
+        let filtered_data = raw_data.filter(function(d) {
+            return !["Puerto Rico", "Virgin Islands", "Northern Mariana Islands", "American Samoa"].includes(d.state);
+        });
+        
+        let grouped_data = d3.group(filtered_data, d => d.state);
+        
         let data = Array.from(grouped_data, ([k, v]) => ({
             state: k,
             avg_cases: d3.mean(v, d => +d.cases_avg_per_100k),
-            avg_deaths: d3.mean(v, d => +d.deaths_avg_per_100k)
+            avg_deaths: d3.mean(v, d => +d.deaths_avg_per_100k),
+            avg_mask_never: d3.mean(v, d => +d.NEVER)
         }));
-
+        
         var margin = { top: 50, right: 50, bottom: 50, left: 50 },
             width = 500 - margin.left - margin.right,
             height = 500 - margin.top - margin.bottom;
 
-        var x = d3.scaleLinear().domain(d3.extent(data, function(d) {return d.avg_cases})).range([0, width]);
-        var y = d3.scaleLinear().domain(d3.extent(data, function(d) {return d.avg_deaths})).range([height, 0]);
+        var x = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_cases})]).range([0, width]);
+        var y = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_deaths})]).range([height, 0]);
 
-        var svg = d3.select('svg')
+        var color = d3.scaleSequential()
+            .domain(d3.extent(data, function(d) {return d.avg_mask_never}))
+            .interpolator(d3.interpolateRgb.gamma(3)("orange", "blue"));
+
+        var svg = d3.select("#my_dataviz")
+            .append('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
             .append('g')
             .attr('transform','translate(' + margin.left + ',' + margin.top + ')');
-
-        svg.selectAll('circles')
+        var tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip");
+        
+        svg.selectAll('circle')
             .data(data)
-            .enter()
-            .append('circle')
+            .join('circle')
             .attr('cx', function(d) {return x(d.avg_cases);})
             .attr('cy', function(d) {return y(d.avg_deaths);})
-            .attr('r', 5);
+            .attr('r', 5)
+            .style("fill", function(d) { return color(d.avg_mask_never); }) 
+             .on("mouseover", function(event, d) { 
+                 tooltip
+                     .style("opacity", 1)
+                     .html("<span style='font-family:Lato'><b>State: </b>" + d.state + "<br/><b>Avg. Cases per 100K: </b>" + d.avg_cases.toFixed(2) + "<br/><b>Avg. Deaths per 100K: </b>" + d.avg_deaths.toFixed(2) + "</span>")
+                     .style("font-size", "14px")
+                 d3.select(this)
+                     .style("stroke", "black")
+                     .style("opacity", 1)
+            })
+            .on("mousemove", function(event, d){ 
+                tooltip
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY + 10) + "px")
+            })
+            .on("mouseout", function(){ 
+                tooltip
+                    .style("opacity", 0)
+                d3.select(this)
+                    .style("stroke", "none")
+                    .style("opacity", 0.8)
+            });
 
         svg.append('g')
             .call(d3.axisLeft(y));
@@ -39,7 +89,34 @@ html>
         svg.append('g')
             .attr('transform', 'translate(0,' + height + ')')
             .call(d3.axisBottom(x));
-    }
+        
+        svg.append("text")
+            .attr("x", width / 2 )
+            .attr("y", 0 - (margin.top / 2))
+             .attr("text-anchor", "middle")
+             .style("font-size", "19px")
+             .style("font-weight", "bold")
+             .style("font-family", "Lato")
+             .text("COVID-19 Statistics by State");
+
+         svg.append("text")
+             .attr("x", width / 2)
+             .attr("y", height + 35)
+             .style("font-size", "14px")
+             .style("text-anchor", "middle")
+             .style("font-family", "Lato")
+             .text("Average Cases per 100K");
+
+         svg.append("text")
+             .attr("transform", "rotate(-90)")
+             .attr("y", 0 - margin.left)
+             .attr("x", 0 - (height / 2))
+             .attr("dy", "1em")
+             .style("font-size", "14px")
+             .style("text-anchor", "middle")
+             .style("font-family", "Lato")
+             .text("Average Deaths per 100K");    
+     }
 </script>
 </body>
 </html>
