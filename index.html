@@ -11,20 +11,24 @@
             border-radius: 3px;
             padding: 5px;
         }
+        .datapoint:hover {
+            cursor: pointer;
+        }
     </style>
- </head>
- <body onload='init()'>
- <div id="my_dataviz"></div>
- <button id="back_button" style="display:none;">Back to beginning</button>
- <script src='https://d3js.org/d3.v6.min.js'></script>
- <script>
-     let raw_data;
+</head>
+<body onload='init()'>
+<div id="my_dataviz"></div>
+<button id="back_button" style="display:none;">Back to beginning</button>
+<script src='https://d3js.org/d3.v6.min.js'></script>
+<script>
+    let raw_data;
     async function init() {
         raw_data = await d3.csv('https://raw.githubusercontent.com/selenaalu/narrative-visualization/master/us-counties-2021-cases-masks.csv');
         
         let filtered_data = raw_data.filter(function(d) {
             return !["Puerto Rico", "Virgin Islands", "Northern Mariana Islands", "American Samoa"].includes(d.state);
         });
+        
         let grouped_data = d3.group(filtered_data, d => d.state);
         
         let data = Array.from(grouped_data, ([k, v]) => ({
@@ -32,52 +36,56 @@
             avg_cases: d3.mean(v, d => +d.cases_avg_per_100k),
             avg_deaths: d3.mean(v, d => +d.deaths_avg_per_100k),
             avg_mask_never: d3.mean(v, d => +d.NEVER)
-         }));
-
-         plot_states(data);
-
-         document.getElementById("back_button").addEventListener("click", function() {
-             plot_states(data);
-             this.style.display = "none";
-         });
-     }
-
-     function plot_counties(state) {
-         document.getElementById("back_button").style.display = "block";
-
-         let filtered_data = raw_data.filter(d => d.state == state);
-         let grouped_data = d3.group(filtered_data, d => d.county);
+        }));
+        
+        plot_states(data);
+        
+        document.getElementById("back_button").addEventListener("click", function() {
+            plot_states(data);
+            this.style.display = "none";
+        });
+    }
+    function plot_counties(state) {
+        document.getElementById("back_button").style.display = "block";
+        
+        let filtered_data = raw_data.filter(d => d.state == state);
+        let grouped_data = d3.group(filtered_data, d => d.county);
 
         let data = Array.from(grouped_data, ([k, v]) => ({
+            state: state,
             county: k,
             avg_cases: d3.mean(v, d => +d.cases_avg_per_100k),
             avg_deaths: d3.mean(v, d => +d.deaths_avg_per_100k),
             avg_mask_never: d3.mean(v, d => +d.NEVER)
         }));
+        
         plot(data, state, true);
     }
     function plot_states(data) {
-         plot(data, "country", false);
-     }
-
-     function plot(data, loc, is_county) {
-         d3.select("svg").remove();
-         d3.select(".tooltip").remove(); 
-
+        plot(data, "country", false);
+    }
+    function plot(data, loc, is_county) {
+        d3.select("svg").remove();
+        d3.select(".tooltip").remove(); 
+        
         var margin = { top: 50, right: 50, bottom: 50, left: 50 },
             width = 500 - margin.left - margin.right,
             height = 500 - margin.top - margin.bottom;
+        
         var x = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_cases})]).range([0, width]);
         var y = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_deaths})]).range([height, 0]);
+        
         var color = d3.scaleSequential()
             .domain(d3.extent(data, function(d) {return d.avg_mask_never}))
             .interpolator(d3.interpolateRgb.gamma(3)("orange", "blue"));
+        
         var svg = d3.select("#my_dataviz")
             .append('svg')
             .attr('width', width + margin.left + margin.right)
             .attr('height', height + margin.top + margin.bottom)
             .append('g')
             .attr('transform','translate(' + margin.left + ',' + margin.top + ')');
+        
         var tooltip = d3.select("body")
             .append("div")
             .attr("class", "tooltip");
@@ -88,16 +96,17 @@
             .attr('cx', function(d) {return x(d.avg_cases);})
             .attr('cy', function(d) {return y(d.avg_deaths);})
             .attr('r', 5)
+            .attr('class', 'datapoint')
             .style("fill", function(d) { return color(d.avg_mask_never); }) 
-             .on("mouseover", function(event, d) { 
-                 tooltip
-                     .style("opacity", 1)
-                     .html("<span style='font-family:Lato'><b>" + (is_county ? "County:" : "State:") + "</b> " + (is_county ? d.county : d.state) + 
-                         "<br/><b>Avg. Cases per 100K:</b> " + d.avg_cases.toFixed(2) + 
-                         "<br/><b>Avg. Deaths per 100K:</b> " + d.avg_deaths.toFixed(2) + "</span>")
-                     .style("font-size", "14px")
-                 d3.select(this)
-                     .style("stroke", "black")
+            .on("mouseover", function(event, d) { 
+                tooltip
+                    .style("opacity", 1)
+                    .html("<span style='font-family:Lato'><b>" + (is_county ? "County:" : "State:") + "</b> " + (is_county ? d.county : d.state) + 
+                        "<br/><b>Avg. Cases per 100K:</b> " + d.avg_cases.toFixed(2) + 
+                        "<br/><b>Avg. Deaths per 100K:</b> " + d.avg_deaths.toFixed(2) + "</span>")
+                    .style("font-size", "14px")
+                d3.select(this)
+                    .style("stroke", "black")
                     .style("opacity", 1)
             })
             .on("mousemove", function(event, d){ 
@@ -112,13 +121,17 @@
                     .style("stroke", "none")
                     .style("opacity", 0.8)
             })
-            .on("click", function(event, d) {
-                if (!is_county) {
-                    plot_counties(d.state);
-                }
-            });
+             .on("click", function(event, d) {
+                 if (!is_county) {
+                     plot_counties(d.state);
+                 } else {
+                     plot_bar_chart(d.state,d.county);
+                 }
+             });
+
         svg.append('g')
             .call(d3.axisLeft(y));
+        
         svg.append('g')
             .attr('transform', 'translate(0,' + height + ')')
             .call(d3.axisBottom(x));
@@ -127,18 +140,19 @@
             .attr("x", width / 2 )
             .attr("y", 0 - (margin.top / 2))
             .attr("text-anchor", "middle")
-             .style("font-size", "19px")
-             .style("font-weight", "bold")
-             .style("font-family", "Lato")
-             .text("COVID-19 Statistics by " + (is_county ? "County in " + loc : "State"));
-
-         svg.append("text")
-             .attr("x", width / 2)
+            .style("font-size", "19px")
+            .style("font-weight", "bold")
+            .style("font-family", "Lato")
+            .text("COVID-19 Statistics by " + (is_county ? "County in " + loc : "State"));
+        
+        svg.append("text")
+            .attr("x", width / 2)
             .attr("y", height + 35)
             .style("font-size", "14px")
             .style("text-anchor", "middle")
             .style("font-family", "Lato")
             .text("Average Cases per 100K");
+        
         svg.append("text")
             .attr("transform", "rotate(-90)")
             .attr("y", 0 - margin.left)
@@ -146,9 +160,93 @@
             .attr("dy", "1em")
             .style("font-size", "14px")
             .style("text-anchor", "middle")
-            .style("font-family", "Lato")
-            .text("Average Deaths per 100K");
-    }
-</script>
-</body>
-</html>
+             .style("font-family", "Lato")
+             .text("Average Deaths per 100K");
+     }
+
+     function plot_bar_chart(state, county) {
+         d3.select("svg").remove();
+         d3.select(".tooltip").remove(); 
+
+         let filtered_data = raw_data.filter(d => d.county == county && d.state == state);
+
+         let mask_data = {
+             NEVER: d3.mean(filtered_data, d => +d.NEVER),
+             RARELY: d3.mean(filtered_data, d => +d.RARELY),
+             SOMETIMES: d3.mean(filtered_data, d => +d.SOMETIMES),
+             FREQUENTLY: d3.mean(filtered_data, d => +d.FREQUENTLY),
+             ALWAYS: d3.mean(filtered_data, d => +d.ALWAYS)
+         };
+
+         let data = Object.entries(mask_data).map(([key, value]) => ({
+             label: key,
+             value: value
+         }));
+
+         let margin = { top: 50, right: 50, bottom: 50, left: 50 },
+             width = 500 - margin.left - margin.right,
+             height = 500 - margin.top - margin.bottom;
+
+         let x = d3.scaleBand()
+             .domain(data.map(d => d.label))
+             .range([0, width])
+             .padding(0.2);
+
+         let y = d3.scaleLinear()
+             .domain([0, 1])
+             .range([height, 0]);
+
+         let svg = d3.select("#my_dataviz")
+             .append('svg')
+             .attr('width', width + margin.left + margin.right)
+             .attr('height', height + margin.top + margin.bottom)
+             .append('g')
+             .attr('transform','translate(' + margin.left + ',' + margin.top + ')');
+
+         svg.append('g')
+             .call(d3.axisLeft(y));
+
+         svg.append('g')
+             .attr('transform', 'translate(0,' + height + ')')
+             .call(d3.axisBottom(x));
+
+         svg.selectAll('rect')
+             .data(data)
+             .join('rect')
+             .attr('x', d => x(d.label))
+             .attr('y', d => y(d.value))
+             .attr('width', x.bandwidth())
+             .attr('height', d => height - y(d.value))
+             .attr('fill', 'steelblue');
+
+         svg.append("text")
+             .attr("x", width / 2 )
+             .attr("y", 0 - (margin.top / 2))
+             .attr("text-anchor", "middle")
+             .style("font-size", "19px")
+             .style("font-weight", "bold")
+             .style("font-family", "Lato")
+             .text("Mask Usage in " + county + " County");
+
+         svg.append("text")
+             .attr("x", width / 2)
+             .attr("y", height + 35)
+             .style("font-size", "14px")
+             .style("text-anchor", "middle")
+             .style("font-family", "Lato")
+             .text("Mask Usage Frequency");
+
+         svg.append("text")
+             .attr("transform", "rotate(-90)")
+             .attr("y", 0 - margin.left)
+             .attr("x", 0 - (height / 2))
+             .attr("dy", "1em")
+             .style("font-size", "14px")
+             .style("text-anchor", "middle")
+             .style("font-family", "Lato")
+             .text("Average Proportion");
+     }
+
+ </script>
+ </body>
+ </html>
