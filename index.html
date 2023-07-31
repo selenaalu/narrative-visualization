@@ -100,7 +100,7 @@
 
         var margin = { top: 100, right: 275, bottom: 150, left: 275 },
             width = 1050 - margin.left - margin.right,
-            height = 750 - margin.top - margin.bottom;
+            height = 700 - margin.top - margin.bottom;
 
         var x = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_cases})]).range([0, width]);
         var y = d3.scaleLinear().domain([0, d3.max(data, function(d) {return d.avg_deaths})]).range([height, 0]);
